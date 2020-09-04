@@ -1,0 +1,10 @@
+.idea/
+google_api/credentials.json
+google_api/token.pickle
+google_api/__pycache__/
+google_api/sprsh_link.txt
+logo.png
+venv/
+app.log
+users.csv
+bot_token.txt

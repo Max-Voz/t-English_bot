@@ -1,0 +1,475 @@
+import logging
+import os
+import time
+import telebot
+from datetime import datetime
+from google_api import add_data_to_sprsh, create_sheet_template, send_email
+from telebot import types
+from typing import Any, Dict, List, Optional, Union
+
+logging.basicConfig(
+    filename='app.log',
+    filemode='a',
+    format='%(levelname)s - %(asctime)s -'
+           ' %(threadName)s - %(name)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S', level=logging.INFO
+)
+
+with open('bot_token.txt') as tfile:
+    token: str = tfile.read()
+bot: telebot = telebot.TeleBot(token)
+
+back_icon = "\U0001F519"
+balloon_icon = "\U0001f4ad"
+books_icon = "\U0001F4DA"
+checkbox_icon = "\u2705"
+checkmark_icon = "\u2714"
+house_icon = "\U0001F3E0"
+pencil_icon = "\U0001F4DD"
+phone_icon = "\U0001F4F1"
+pin_icon = "\U0001F4CC"
+question_icon = "\u2754"
+world_icon = "\U0001F310"
+
+COURSES: Dict[str, str] = {
+    "Для девов":
+        f"Курс для девов:\n\n"
+        f"{pin_icon} Коммуникативный курс, индивидуальный или в паре;\n"
+        f"{pin_icon} Как описывать технические решения или проблемы;\n"
+        f"{pin_icon} Общение с заказчиком и членами удаленной команды;\n"
+        f"{pin_icon} Демо и релизы;\n"
+        f"{pin_icon} Участие в Scrum-митингах.\n",
+    "Для QA":
+        f"Курс для QA:\n\n"
+        f"{pin_icon}Коммуникативный курс, индивидуальный или в паре;\n"
+        f"{pin_icon}Написание и презентация тест-кейсов и тест-планов;\n"
+        f"{pin_icon}Общение с удаленной командой разработчиков;\n"
+        f"{pin_icon}Обсуждение “багов”;\n"
+        f"{pin_icon}Работа с документацией.\n",
+    "Подготовка к интервью":
+        f"Курс Подготовка к интервью:\n\n"
+        f"{pin_icon} Индивидуальный коммуникативный курс;\n"
+        f"{pin_icon} Как пройти техническое интервью;\n"
+        f"{pin_icon} Самопрезентация;\n"
+        f"{pin_icon} Ответы на кейсовые/ситуационные вопросы;\n"
+        f"{pin_icon} Как структурировать свои мысли и идеи.\n",
+    "Для IT-менеджеров":
+        f"Курс для IT-менеджеров:\n\n"
+        f"{pin_icon} Коммуникативный курс, индивидуальный или в паре;\n"
+        f"{pin_icon} Для BA, PM, Product менеджеров, Scrum-мастеров;\n"
+        f"{pin_icon} Scrum митинги, созвоны с заказчиком;\n"
+        f"{pin_icon} Проектная коммуникация;\n"
+        f"{pin_icon} Планирование, целеполагание, эстимация;\n"
+        f"{pin_icon} Менеджмент задач и команды.\n",
+    "Для UI/UX":
+        f"Курс для UI/UX:\n\n"
+        f"{pin_icon} Описание и оценка требований пользователя;\n"
+        f"{pin_icon} Как иллюстрировать идеи, используя сториборд, "
+        f"карты тех.процесса и Sitemap;\n"
+        f"{pin_icon} Презентация драфтов и прототипов для стейкхолдеров;\n"
+        f"{pin_icon} Описание UX-проблем и поиск решений;\n"
+        f"{pin_icon} Презентация и обсуждение customer journey map, "
+        f"создание сценариев, design research;\n"
+        f"{pin_icon} Работа с веб-аналитикой и презентация "
+        f"результатов тестирования.\n",
+    "Для свитчеров":
+        f"Курс для свитчеров:\n\n"
+        f"{pin_icon} 30 часов занятий в группе до 5 человек;\n"
+        f"{pin_icon} Преподаватели с опытом работы в ИТ;\n"
+        f"{pin_icon} Практические задания с реальными кейсами "
+        f"вместо домашки;\n"
+        f"{pin_icon} Social learning;\n"
+        f"{pin_icon} Лонгриды и видео для глубокого погружения;\n"
+        f"{pin_icon} Удобный график для каждой группы.\n",
+}
+
+RESOURCES: Dict[str, str] = {
+    "telegram": "https://t.me/TiEnglish",
+    "youtube": "https://www.youtube.com/channel/UCVqPkDCpmh7banukNyKMkGg",
+    "instagram": "https://www.instagram.com/t.english4it/",
+}
+
+
+class User:
+    def __init__(self, name: str) -> None:
+        self.name: str = name
+        self.phone: Optional[Union[str, int]] = None
+        self.email: Optional[str] = None
+        self.course: Optional[str] = None
+
+    def __repr__(self) -> str:
+        return f"User: {self.name}, {self.phone}, {self.email}, {self.course}"
+
+
+temp_users: Dict[str, User] = {}
+if not os.path.exists("users.csv"):
+    with open("users.csv", "w") as file:
+        file.write(
+            "chat_id, user_id, name, phone, email, course, creation_datetime, "
+            "email_status, email_sent_datetime\n"
+        )
+
+
+def make_menu_buttons(
+        row_w: int, menu_array: List[List[str]]) -> types.InlineKeyboardMarkup:
+    """
+    :param row_w: quantity of items in row
+    :param menu_array: has to come in the next format:
+                      [[text, callback data], [text, callback data]]
+    :return: returns ready markup
+    """
+
+    markup = types.InlineKeyboardMarkup(row_width=row_w)
+    markup.add(
+        *[
+            types.InlineKeyboardButton(
+                text=f"{item[0]}", callback_data=f"{item[1]}"
+            )
+            for item in menu_array
+        ]
+    )
+    return markup
+
+
+def make_resources_buttons(
+        row_w: int, menu_array: List[List[str]]) -> types.InlineKeyboardMarkup:
+    """
+    :param row_w: quantity of items in row
+    :param menu_array: has to come in the next format:
+                      [[text, url], [text, url]....[text, callback]]
+    :return: returns ready markup with all items as urls and last with callback
+    """
+    markup = types.InlineKeyboardMarkup(row_width=row_w)
+    markup.add(
+        *[
+            types.InlineKeyboardButton(text=f"{item[0]}", url=f"{item[1]}")
+            for item in menu_array[0:3]
+        ]
+    )
+    markup.add(
+        types.InlineKeyboardButton(
+            text=f"{menu_array[-1][0]}", callback_data=f"{menu_array[-1][1]}"
+        )
+    )
+    return markup
+
+
+@bot.message_handler(commands=["start", "help"])
+def start(message: types.Message) -> None:
+    main_menu_buttons = [
+        [f"{books_icon} Курсы", "courses"],
+        [f"{checkbox_icon}{pencil_icon} Оставить заявку", "leave_application"],
+        [f"{world_icon} Ресурсы по английскому для IT", "resources"],
+    ]
+    bot.send_message(
+        chat_id=message.chat.id,
+        text="Привет! Я T-English–бот.\n"
+             "Помогу узнать о наших курсах, "
+             "отправить твою заявку, "
+             "чтобы записаться на пробное занятие, и дам доступ "
+             "к бесплатным материалам!",
+        reply_markup=make_menu_buttons(2, main_menu_buttons),
+        parse_mode="HTML",
+    )
+
+
+@bot.message_handler(commands=["apply"])
+def apply(message: types.Message) -> None:
+    bot.send_message(
+        chat_id=message.chat.id, text="Как мы можем к тебе обращаться? "
+    )
+
+    bot.register_next_step_handler(message, process_name_step)
+
+
+def process_name_step(message: types.Message) -> None:
+    user: User = User(message.text)
+    temp_users[message.chat.id] = user
+
+    reply_markup = types.ReplyKeyboardMarkup(
+        one_time_keyboard=True, resize_keyboard=True
+    )
+    contact_keyboard = types.KeyboardButton(
+        text=f"{phone_icon} Отправить мой номер телефона", request_contact=True
+    )
+    reply_markup.add(contact_keyboard)
+
+    bot.send_message(
+        chat_id=message.chat.id,
+        text=f"{user.name}, укажи твой номер телефона или "
+             "поделись им, нажав кнопку ниже:",
+        reply_markup=reply_markup,
+    )
+
+    bot.register_next_step_handler(message, process_phone_step)
+
+
+def process_phone_step(message: types.Message) -> None:
+    try:
+        user: User = temp_users[message.chat.id]
+    except KeyError:
+        bot.send_message(
+            chat_id=message.chat.id, text=f"Извини, что-то пошло не так"
+        )
+        bot.clear_step_handler_by_chat_id(chat_id=message.chat.id)
+        start(message)
+        return
+    try:
+        user.phone = message.json["text"]
+    except KeyError:
+        try:
+            user.phone = message.json["contact"]["phone_number"]
+        except KeyError:
+            user.phone = None
+    reply_markup = types.ReplyKeyboardRemove()
+    bot.send_message(
+        chat_id=message.chat.id,
+        text=f"{user.name}, укажи твой email: ",
+        reply_markup=reply_markup,
+    )
+    bot.register_next_step_handler(message, process_email_step)
+
+
+def process_email_step(message: types.Message) -> None:
+    try:
+        user = temp_users[message.chat.id]
+    except KeyError:
+        bot.send_message(
+            chat_id=message.chat.id, text=f"Извини, что-то пошло не так"
+        )
+        bot.clear_step_handler_by_chat_id(chat_id=message.chat.id)
+        start(message)
+        return
+
+    user.email = message.text
+    courses_buttons_choose = [
+        [f"{checkmark_icon} {course}", f"{course}|ch"] for course in COURSES
+    ]
+    courses_buttons_choose.append(
+        [f"{question_icon} Я пока не уверен в выборе курса", "Не уверен|ch"]
+    )
+
+    bot.send_message(
+        chat_id=message.chat.id,
+        text=f"Выбери интересующий тебя курс:",
+        reply_markup=make_menu_buttons(2, courses_buttons_choose),
+    )
+
+    bot.clear_step_handler_by_chat_id(chat_id=message.chat.id)
+
+
+@bot.callback_query_handler(func=lambda call: True)
+def handle_query(call: Any) -> None:
+    courses_buttons: List[List[str]] = [
+        [f"{checkmark_icon} {course}", course] for course in COURSES
+    ]
+    courses_buttons.append(
+        [f"{house_icon} Вернуться в главное меню", "main_menu"]
+    )
+    one_course_buttons: List[List[str]] = [
+        [f"{back_icon} К выбору курса", "courses"],
+        [f"{checkbox_icon}{pencil_icon} Оставить заявку", "leave_application"],
+        [f"{house_icon} В главное меню", "main_menu"],
+    ]
+    resources_buttons: List[List[str]] = [
+        [f"Telegram", f'{RESOURCES["telegram"]}'],
+        [f"Youtube", f'{RESOURCES["youtube"]}'],
+        [f"Instagram", f'{RESOURCES["instagram"]}'],
+        [f"{house_icon} В главное меню", "main_menu"],
+    ]
+
+    if call.data == "main_menu":
+        start(call.message)
+
+    if call.data == "courses":
+        bot.send_message(
+            chat_id=call.message.chat.id,
+            text=f"Выбери интересующий тебя курс:",
+            reply_markup=make_menu_buttons(2, courses_buttons),
+        )
+
+    if call.data == "resources":
+        bot.send_message(
+            chat_id=call.message.chat.id,
+            text="Выбери интересующий тебя ресурс: ",
+            reply_markup=make_resources_buttons(3, resources_buttons),
+        )
+
+    if call.data == "leave_application":
+        try:
+            del temp_users[call.message.chat.id]
+        except KeyError:
+            pass
+        bot.clear_step_handler_by_chat_id(chat_id=call.message.chat.id)
+        apply(call.message)
+
+    if call.data in COURSES.keys():
+        bot.send_message(
+            chat_id=call.message.chat.id,
+            text=COURSES[call.data],
+            reply_markup=make_menu_buttons(2, one_course_buttons),
+        )
+
+    if call.data[0:-3] in COURSES.keys() or call.data == "Не уверен|ch":
+        bot.edit_message_text(
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            text=balloon_icon)
+        finish_buttons: List[List[str]] = [
+            [f"Да", "apply_yes"],
+            [f"Нет", "apply_no"],
+        ]
+        try:
+            user: User = temp_users[call.message.chat.id]
+        except KeyError:
+            bot.send_message(
+                chat_id=call.message.chat.id,
+                text=f"Извини, что-то пошло не так"
+            )
+            bot.clear_step_handler_by_chat_id(chat_id=call.message.chat.id)
+            start(call.message)
+            return
+
+        user.course = call.data.split("|")[0]
+        bot.send_message(
+            chat_id=call.message.chat.id,
+            text=f"Это твои данные?\n"
+                 f"Имя: {user.name},\n"
+                 f"Телефон: {user.phone},\n"
+                 f"Email: {user.email},\n"
+                 f"Курс: {user.course}",
+            reply_markup=make_menu_buttons(2, finish_buttons),
+        )
+        bot.clear_step_handler_by_chat_id(chat_id=call.message.chat.id)
+
+    if call.data == "apply_no":
+        bot.edit_message_reply_markup(
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            reply_markup=None,
+        )
+
+        bot.send_message(
+            chat_id=call.message.chat.id,
+            text="Пожалуйста, заполни заявку еще раз:"
+        )
+        try:
+            del temp_users[call.message.chat.id]
+        except KeyError:
+            bot.send_message(
+                chat_id=call.message.chat.id,
+                text="Извини, сначала надо заполнить заявку!",
+                reply_markup=make_menu_buttons(
+                    1,
+                    [
+                        [
+                            f"{checkbox_icon}{pencil_icon}"
+                            f" Оставить заявку",
+                            "leave_application",
+                        ],
+                        [f"{house_icon} В главное меню", "main_menu"],
+                    ],
+                ),
+            )
+            return
+        bot.clear_step_handler_by_chat_id(chat_id=call.message.chat.id)
+        apply(call.message)
+
+    if call.data == "apply_yes":
+        bot.edit_message_reply_markup(
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            reply_markup=None,
+        )
+        try:
+            user_to_write: Dict[str, str] = {
+                "Telegram_id": f"@{call.message.chat.username}",
+                "Имя пользователя": f"{temp_users[call.message.chat.id].name}",
+                "Телефон": f"{temp_users[call.message.chat.id].phone}",
+                "email": f"{temp_users[call.message.chat.id].email}",
+                "Желаемый курс": f"{temp_users[call.message.chat.id].course}",
+                "Время создания заявки":
+                    f'{datetime.now().strftime("%d/%m/%Y %H:%M:%S")}',
+            }
+            bot.send_message(
+                chat_id=call.message.chat.id,
+                text="Спасибо, твоя заявка принята!\n"
+                     "В ближайшее время мы свяжемся с тобой!",
+                reply_markup=make_menu_buttons(
+                    1, [[f"{house_icon} В главное меню", "main_menu"]]
+                ),
+            )
+            if not os.path.exists("google_api/sprsh_link.txt"):
+                current_sheet: Optional[
+                    Dict[str, str]
+                ] = create_sheet_template()
+                logging.warning('Created new spreadsheet')
+            else:
+                with open("google_api/sprsh_link.txt", "r") as s_file:
+                    data: List[str] = s_file.readlines()[-1].split(" | ")
+                    current_sheet = {
+                        "spreadsheet_id": data[0], "sheet_name": data[1]
+                    }
+
+            if add_data_to_sprsh(user_to_write, current_sheet):
+                logging.info('data successfully written to spreadsheet')
+            else:
+                current_sheet = create_sheet_template()
+                if add_data_to_sprsh(user_to_write, current_sheet):
+                    logging.info("data successfully written to spreadsheet")
+                else:
+                    logging.error("failed to write data to spreadsheets")
+
+            with open("users.csv", "a") as f:
+                f.write(
+                    f"{call.message.chat.id}, "
+                    f'{", ".join([item for item in user_to_write.values()])}'
+                )
+            if send_email(
+                    "Новая заявка от бота!",
+                    "\n".join(
+                        [f"{item}  |  {value}" for
+                         item, value in user_to_write.items()]
+                    ),
+            ):
+                with open("users.csv", "a") as f:
+                    f.write(
+                        ", email sent successfully! , "
+                        f'{datetime.now().strftime("%d/%m/%Y %H:%M:%S")}\n'
+                    )
+            else:
+                logging.warning('could not send email')
+                with open("users.csv", "a") as f:
+                    f.write(
+                        ", !COULD NOT SEND EMAIL!, "
+                        f'{datetime.now().strftime("%d/%m/%Y %H:%M:%S")}\n'
+                    )
+            bot.clear_step_handler_by_chat_id(chat_id=call.message.chat.id)
+            del temp_users[call.message.chat.id]
+        except KeyError:
+            bot.send_message(
+                chat_id=call.message.chat.id,
+                text="Извини, сначала надо заполнить заявку!",
+                reply_markup=make_menu_buttons(
+                    1,
+                    [
+                        [
+                            f"{checkbox_icon}{pencil_icon} Оставить заявку",
+                            "leave_application",
+                        ],
+                        [
+                            f"{house_icon} В главное меню", "main_menu"
+                        ],
+                    ],
+                ),
+            )
+            return
+
+
+while True:
+    try:
+        bot.polling(none_stop=True, interval=0, timeout=0)
+    except Exception as e:
+        logging.error(f'Error "{e}" in main app', exc_info=True)
+        time.sleep(2)
+        continue
