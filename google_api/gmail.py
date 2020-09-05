@@ -20,15 +20,6 @@ SCOPES: List[str] = [
 EMAIL_RECEIVER: str = "cirkull90@gmail.com"
 
 
-logging.basicConfig(
-    filename='app.log',
-    filemode='a',
-    format='%(levelname)s - %(asctime)s -'
-           ' %(threadName)s - %(name)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S', level=logging.INFO
-)
-
-
 def build_service_gmail() -> build:
     creds: build.credentials = None
     # The file token.pickle stores the user's access and refresh tokens, and is

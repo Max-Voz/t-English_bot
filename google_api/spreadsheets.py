@@ -5,7 +5,7 @@ from googleapiclient.errors import HttpError
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
-from typing import Dict, List, Union, Optional
+from typing import Dict, List, Optional
 
 # If modifying these scopes, delete the file token.pickle.
 SCOPES: List[str] = [
@@ -13,14 +13,6 @@ SCOPES: List[str] = [
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/gmail.send",
 ]
-
-logging.basicConfig(
-    filename='app.log',
-    filemode='a',
-    format='%(levelname)s - %(asctime)s -'
-           ' %(threadName)s - %(name)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S', level=logging.INFO
-)
 
 
 def build_service_spreadsheet() -> build:
@@ -97,10 +89,6 @@ def create_sheet_template() -> Optional[Dict[str, str]]:
                 ],
             },
         ).execute()
-
-        # logging.info(
-        #     f"{result.get('updates').get('updatedCells')} cells appended."
-        # )
 
         service.spreadsheets().batchUpdate(
             spreadsheetId=spreadsheet["spreadsheetId"],
