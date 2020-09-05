@@ -50,7 +50,7 @@ def create_sheet_template() -> Optional[Dict[str, str]]:
     try:
         if not os.path.exists("google_api/sprsh_link.txt"):
             with open("google_api/sprsh_link.txt", "w") as file:
-                file.write(f"Spreadsheet id | Spreadsheet_link\n\n")
+                file.write(f"Spreadsheet id | Sheet name | Spreadsheet_link\n\n")
         spreadsheet = (
             service.spreadsheets().create(
                 body={
