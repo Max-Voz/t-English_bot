@@ -8,3 +8,4 @@ venv/
 app.log
 users.csv
 bot_token.txt
+content_maker/__pycache__/
