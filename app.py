@@ -8,7 +8,6 @@ from telebot import types
 from typing import Any, Optional, Union
 from content_maker import *
 
-
 logging.basicConfig(
     filename='app.log',
     filemode='a',
@@ -44,7 +43,6 @@ if not os.path.exists("users.csv"):
 
 @bot.message_handler(commands=["start", "help"])
 def start(message: types.Message) -> None:
-
     bot.send_message(
         chat_id=message.chat.id,
         text="Привет! Я T-English–бот.\n"
@@ -137,7 +135,6 @@ def process_email_step(message: types.Message) -> None:
 
 @bot.callback_query_handler(func=lambda call: True)
 def handle_query(call: Any) -> None:
-
     if call.data == "main_menu":
         start(call.message)
 
@@ -274,12 +271,15 @@ def handle_query(call: Any) -> None:
                     f"{call.message.chat.id}, "
                     f'{", ".join([item for item in user_to_write.values()])}'
                 )
+            with open("google_api/sprsh_link.txt", "r") as s_file:
+                sprsh_link: str = s_file.readlines()[-1].split(" | ")[-1]
+
             if send_email(
                     "Новая заявка от бота!",
                     "\n".join(
                         [f"{item}  |  {value}" for
                          item, value in user_to_write.items()]
-                    ),
+                    ) + f"\nФайл заявок - {sprsh_link}"
             ):
                 with open("users.csv", "a") as f:
                     f.write(
