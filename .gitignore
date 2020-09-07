@@ -7,5 +7,5 @@ logo.png
 venv/
 app.log
 users.csv
-bot_token.txt
+bot_token
 content_maker/__pycache__/

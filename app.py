@@ -13,10 +13,10 @@ logging.basicConfig(
     filemode='a',
     format='%(levelname)s - %(asctime)s -'
            ' %(threadName)s - %(name)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S', level=logging.INFO
+    datefmt='%Y-%m-%d %H:%M:%S', level=logging.WARNING
 )
 
-with open('bot_token.txt') as tfile:
+with open('bot_token') as tfile:
     token: str = tfile.read()
 bot: telebot = telebot.TeleBot(token)
 
