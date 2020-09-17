@@ -1,6 +1,7 @@
 .idea/
-google_api/credentials.json
+My_creds/
 google_api/token.pickle
+google_api/credentials.json
 google_api/__pycache__/
 google_api/sprsh_link.txt
 logo.png
@@ -9,3 +10,4 @@ app.log
 users.csv
 bot_token
 content_maker/__pycache__/
+Katya_kreds/

@@ -17,7 +17,7 @@ SCOPES: List[str] = [
     "https://www.googleapis.com/auth/gmail.send",
 ]
 
-EMAIL_RECEIVER: str = "Input email receiver here"
+EMAIL_RECEIVER: str = "maksimvoznyuk@gmail.com"
 
 
 def build_service_gmail() -> build:
